@@ -589,6 +589,8 @@ const ERAS=[
 ];
 const baseNodeData=[...concepts,...papers,...levers,...wrConstraints];
 const sprintCases=[...new Set([...Object.keys(countryLevers),...Object.keys(countryConstraints)])].sort();
+const DOMAIN_ORDER=Object.keys(DOM);
+const ringConcepts=[...concepts].sort((a,b)=>{const ai=DOMAIN_ORDER.indexOf(a.domain),bi=DOMAIN_ORDER.indexOf(b.domain);return ai!==bi?ai-bi:a.id.localeCompare(b.id);});
 
 function buildGraph(fDom,fCase,fTier,fEdge,maxYr,warRoom,sprintCase,studentPapers,showStudentPapers,promotedPapers){
   const nodes=[],links=[];
@@ -644,6 +646,25 @@ function buildGraph(fDom,fCase,fTier,fEdge,maxYr,warRoom,sprintCase,studentPaper
     const nids2=new Set(nodes.map(n=>n.id));
     warEdges.forEach(e=>{if(!nids2.has(e.s)||!nids2.has(e.t))return;links.push({source:e.s,target:e.t,type:e.type,note:e.note});});
   }
+  return{nodes,links};
+}
+
+function buildNeighborhoodGraph(focusId,fullGraph){
+  const neighborIds=new Set([focusId]);
+  fullGraph.links.forEach(l=>{
+    const s=typeof l.source==="object"?l.source.id:l.source;
+    const t=typeof l.target==="object"?l.target.id:l.target;
+    if(s===focusId)neighborIds.add(t);
+    if(t===focusId)neighborIds.add(s);
+  });
+  const nodes=fullGraph.nodes.filter(n=>neighborIds.has(n.id));
+  if(nodes.length===0){const fn=fullGraph.nodes.find(n=>n.id===focusId);return{nodes:fn?[fn]:[],links:[]};}
+  const nodeIds=new Set(nodes.map(n=>n.id));
+  const links=fullGraph.links.filter(l=>{
+    const s=typeof l.source==="object"?l.source.id:l.source;
+    const t=typeof l.target==="object"?l.target.id:l.target;
+    return nodeIds.has(s)&&nodeIds.has(t);
+  });
   return{nodes,links};
 }
 
@@ -839,6 +860,8 @@ export default function App(){
   const [dims,setDims]=useState({w:800,h:640});
   const [tourId,setTourId]=useState(null),[tourStep,setTourStep]=useState(0),[tab,setTab]=useState("filters");
   const [warRoom,setWarRoom]=useState(false),[sprintCase,setSprintCase]=useState(null);
+  const [viewMode,setViewMode]=useState("ring"); // "ring" | "graph"
+  const [expandedConcept,setExpandedConcept]=useState(null); // concept id | null
   const [rightPanel,setRightPanel]=useState(true);
   const [showStudentPapers,setShowStudentPapers]=useState(false);
   const [studentPapers,setStudentPapers]=useState([]);
@@ -896,12 +919,22 @@ export default function App(){
   useEffect(()=>{tourIdRef.current=tourId;},[tourId]);
   useEffect(()=>{const h=e=>{if(e.key==="Escape")setShowAbout(false);};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);},[]);
   const activeTour=useMemo(()=>tours.find(t=>t.id===tourId)||null,[tourId]);
-  const graph=useMemo(()=>buildGraph(fDom,fCase,fTier,fEdge,maxYr,warRoom,sprintCase,studentPapers,showStudentPapers,promotedPapers),[fDom,fCase,fTier,fEdge,maxYr,warRoom,sprintCase,studentPapers,showStudentPapers,promotedPapers]);
+  const fullGraph=useMemo(()=>buildGraph(fDom,fCase,fTier,fEdge,maxYr,warRoom,sprintCase,studentPapers,showStudentPapers,promotedPapers),[fDom,fCase,fTier,fEdge,maxYr,warRoom,sprintCase,studentPapers,showStudentPapers,promotedPapers]);
+  const activeGraph=useMemo(()=>{
+    if(expandedConcept&&viewMode==="graph"&&!tourId&&!warRoom)return buildNeighborhoodGraph(expandedConcept,fullGraph);
+    return fullGraph;
+  },[fullGraph,expandedConcept,viewMode,tourId,warRoom]);
 
-  // Bug fix: clear stale selection when graph changes
+  const conceptPaperCounts=useMemo(()=>{
+    const counts={};const paperIds=new Set(fullGraph.nodes.filter(n=>n.type==="paper").map(n=>n.id));
+    concepts.forEach(c=>{let count=0;const allE=[...edges,...(promotedPapers||[]).flatMap(p=>p.edges||[]),...(showStudentPapers?(studentPapers||[]).flatMap(p=>p.edges||[]):[])];allE.forEach(e=>{if(e.s===c.id&&paperIds.has(e.t))count++;if(e.t===c.id&&paperIds.has(e.s))count++;});counts[c.id]=count;});
+    return counts;
+  },[fullGraph,promotedPapers,studentPapers,showStudentPapers]);
+
+  // Bug fix: clear stale selection when active graph changes
   useEffect(()=>{
-    if(sel&&!graph.nodes.find(n=>n.id===sel.id))setSel(null);
-  },[graph]);
+    if(sel&&!activeGraph.nodes.find(n=>n.id===sel.id))setSel(null);
+  },[activeGraph]);
 
   useEffect(()=>{
     if(!wrapRef.current)return;
@@ -909,12 +942,81 @@ export default function App(){
     obs.observe(wrapRef.current);return()=>obs.disconnect();
   },[]);
 
+  // ═══ RING VIEW RENDERING ═══
   useEffect(()=>{
-    if(!svgRef.current||graph.nodes.length===0) return;
+    if(!svgRef.current)return;
+    if(viewMode!=="ring")return;
     const svg=d3.select(svgRef.current);svg.selectAll("*").remove();
-    const{w,h}=dims,nd=graph.nodes.map(d=>({...d})),ld=graph.links.map(d=>({...d}));
+    const{w,h}=dims;
+    const cx=w/2,cy=h/2,ringR=Math.min(w,h)*0.35;
     const g=svg.append("g");
-    svg.call(d3.zoom().scaleExtent([0.2,6]).on("zoom",e=>g.attr("transform",e.transform)));
+    svg.call(d3.zoom().scaleExtent([0.4,4]).on("zoom",e=>g.attr("transform",e.transform)));
+    // Defs
+    const defs=svg.append("defs");
+    const fl=defs.append("filter").attr("id","glow").attr("x","-50%").attr("y","-50%").attr("width","200%").attr("height","200%");
+    fl.append("feGaussianBlur").attr("stdDeviation","5").attr("result","b");
+    const fm=fl.append("feMerge");fm.append("feMergeNode").attr("in","b");fm.append("feMergeNode").attr("in","SourceGraphic");
+    Object.entries(ET).forEach(([k,v])=>{defs.append("marker").attr("id","a-"+k).attr("viewBox","0 -3 6 6").attr("refX",6).attr("refY",0).attr("markerWidth",5).attr("markerHeight",5).attr("orient","auto").append("path").attr("d","M0,-3L6,0L0,3").attr("fill",v.color+"88");});
+    // Compute ring positions
+    const n=ringConcepts.length;
+    const cpos=ringConcepts.map((c,i)=>{
+      const angle=(2*Math.PI*i)/n-Math.PI/2;
+      return{...c,x:cx+ringR*Math.cos(angle),y:cy+ringR*Math.sin(angle),angle,type:"concept",r:32,color:DOM[c.domain].color};
+    });
+    const posMap=new Map(cpos.map(c=>[c.id,c]));
+    // Concept-concept edges (curved)
+    const ccEdges=edges.filter(e=>e.s.startsWith("c_")&&e.t.startsWith("c_")&&posMap.has(e.s)&&posMap.has(e.t));
+    const lk=g.append("g").attr("class","cc-edges").selectAll("path").data(ccEdges).join("path")
+      .attr("d",e=>{const s=posMap.get(e.s),t=posMap.get(e.t);const mx=(s.x+t.x)/2*0.55+cx*0.45,my=(s.y+t.y)/2*0.55+cy*0.45;return"M"+s.x+","+s.y+" Q"+mx+","+my+" "+t.x+","+t.y;})
+      .attr("fill","none").attr("stroke",e=>ET[e.type]?ET[e.type].color+"25":"#33333325").attr("stroke-width",0.8)
+      .attr("stroke-dasharray",e=>ET[e.type]?.dash||"none");
+    // Concept nodes
+    const nk=g.append("g").attr("class","ring-concepts").selectAll("g").data(cpos).join("g")
+      .attr("transform",d=>"translate("+d.x+","+d.y+")").style("cursor","pointer");
+    // Outer halo
+    nk.append("circle").attr("r",d=>d.r+4).attr("fill",d=>d.color+"08").attr("stroke",d=>d.color+"33").attr("stroke-width",1);
+    // Inner circle
+    nk.append("circle").attr("r",d=>d.r).attr("fill",d=>d.color+"30").attr("stroke",d=>d.color).attr("stroke-width",2.5).attr("filter","url(#glow)")
+      .attr("opacity",d=>conceptPaperCounts[d.id]>0?1:0.3);
+    // Labels
+    nk.each(function(d){const lines=d.label.split("\n"),s=d3.select(this);lines.forEach((line,i)=>{s.append("text").text(line).attr("text-anchor","middle").attr("dy",(i-(lines.length-1)/2)*13+1).attr("fill","#f0e6d8").attr("font-size","10px").attr("font-weight","700").attr("font-family","system-ui,sans-serif").attr("pointer-events","none");});});
+    // Paper count badge
+    nk.append("text").text(d=>{const c=conceptPaperCounts[d.id];return c>0?c+" paper"+(c>1?"s":""):"";}).attr("text-anchor","middle").attr("dy",d=>d.r+16).attr("fill","#5a5a6a").attr("font-size","7px").attr("font-family","system-ui,sans-serif").attr("pointer-events","none");
+    // Entrance animation
+    nk.style("opacity",0).transition().delay((_,i)=>i*35).duration(400).style("opacity",1);
+    lk.style("opacity",0).transition().delay(400).duration(600).style("opacity",1);
+    // Concept hover
+    nk.on("mouseenter",function(ev,d){
+      setHov(d);
+      const conn=new Set();ccEdges.forEach(e=>{if(e.s===d.id)conn.add(e.t);if(e.t===d.id)conn.add(e.s);});
+      nk.selectAll("circle").transition().duration(150).attr("opacity",nd=>(nd.id===d.id||conn.has(nd.id))?1:0.15);
+      nk.selectAll("text").transition().duration(150).attr("opacity",nd=>(nd.id===d.id||conn.has(nd.id))?1:0.15);
+      lk.transition().duration(150).style("opacity",e=>(e.s===d.id||e.t===d.id)?0.7:0.03);
+    }).on("mouseleave",function(){
+      setHov(null);
+      nk.selectAll("circle").transition().duration(250).attr("opacity",d=>conceptPaperCounts[d.id]>0?1:0.3);
+      nk.selectAll("text").transition().duration(250).attr("opacity",1);
+      lk.transition().duration(250).style("opacity",1);
+    }).on("click",(ev,d)=>{
+      ev.stopPropagation();
+      // Transition into focused force graph for this concept's neighborhood
+      setExpandedConcept(d.id);
+      setViewMode("graph");
+      setSel(d);setRightPanel(true);
+    });
+    svg.on("click",()=>{setSel(null);});
+    d3Ref.current={nk,lk};
+  },[viewMode,dims,fullGraph,conceptPaperCounts]);
+
+  // ═══ FORCE GRAPH RENDERING ═══
+  useEffect(()=>{
+    if(!svgRef.current||activeGraph.nodes.length===0||viewMode!=="graph") return;
+    const svg=d3.select(svgRef.current);svg.selectAll("*").remove();
+    const{w,h}=dims,nd=activeGraph.nodes.map(d=>({...d})),ld=activeGraph.links.map(d=>({...d}));
+    const isNeighborhood=expandedConcept!==null;
+    const g=svg.append("g");
+    const zoom=d3.zoom().scaleExtent([0.2,6]).on("zoom",e=>g.attr("transform",e.transform));
+    svg.call(zoom);
     const defs=svg.append("defs");
     const fl=defs.append("filter").attr("id","glow").attr("x","-50%").attr("y","-50%").attr("width","200%").attr("height","200%");
     fl.append("feGaussianBlur").attr("stdDeviation","5").attr("result","b");
@@ -957,17 +1059,35 @@ export default function App(){
       nk.selectAll("circle").transition().duration(250).attr("r",n=>n.r);
       nk.selectAll("text").transition().duration(250).attr("opacity",1);
       lk.transition().duration(250).attr("opacity",1).attr("stroke-width",l=>{if(ET[l.type]&&ET[l.type].group==="warroom")return 2;return l.type==="foundational"?1.5:l.type==="causes"?1.2:0.8;});
-    }).on("click",(ev,d)=>{ev.stopPropagation();setSel(prev=>(prev&&prev.id===d.id)?null:d);setRightPanel(true);});
-    svg.on("click",()=>setSel(null));
-    const sim=d3.forceSimulation(nd).force("link",d3.forceLink(ld).id(d=>d.id).distance(d=>{const sn=nd.find(n=>n.id===(typeof d.source==="object"?d.source.id:d.source)),tn=nd.find(n=>n.id===(typeof d.target==="object"?d.target.id:d.target));if(sn&&tn&&sn.type==="concept"&&tn.type==="concept")return 160;if(ET[d.type]&&ET[d.type].group==="warroom")return 90;return d.type==="foundational"?70:110;}).strength(d=>{if(ET[d.type]&&ET[d.type].group==="warroom")return 0.4;return d.type==="foundational"?0.5:d.type==="causes"?0.15:0.12;})).force("charge",d3.forceManyBody().strength(d=>{if(d.type==="lever")return -350;if(d.type==="constraint")return -300;return d.type==="concept"?-500:d.tier==="spine"?-150:-60;})).force("center",d3.forceCenter(w/2,h/2).strength(0.04)).force("collide",d3.forceCollide().radius(d=>d.r+8).strength(0.8)).force("x",d3.forceX(w/2).strength(0.025)).force("y",d3.forceY(h/2).strength(0.025));
+    }).on("click",(ev,d)=>{
+      ev.stopPropagation();
+      // Browsable: clicking a concept in neighborhood mode re-focuses on it
+      if(d.type==="concept"&&isNeighborhood){setExpandedConcept(d.id);setSel(d);setRightPanel(true);return;}
+      setSel(prev=>(prev&&prev.id===d.id)?null:d);setRightPanel(true);
+    });
+    svg.on("click",()=>{setSel(null);});
+    // Simulation forces — tuned for neighborhood (fewer nodes) vs full graph
+    const sim=d3.forceSimulation(nd).force("link",d3.forceLink(ld).id(d=>d.id).distance(d=>{const sn=nd.find(n=>n.id===(typeof d.source==="object"?d.source.id:d.source)),tn=nd.find(n=>n.id===(typeof d.target==="object"?d.target.id:d.target));if(sn&&tn&&sn.type==="concept"&&tn.type==="concept")return isNeighborhood?120:160;if(ET[d.type]&&ET[d.type].group==="warroom")return 90;return d.type==="foundational"?(isNeighborhood?60:70):(isNeighborhood?80:110);}).strength(d=>{if(ET[d.type]&&ET[d.type].group==="warroom")return 0.4;return d.type==="foundational"?(isNeighborhood?0.6:0.5):d.type==="causes"?0.15:0.12;})).force("charge",d3.forceManyBody().strength(d=>{if(d.type==="lever")return -350;if(d.type==="constraint")return -300;return d.type==="concept"?(isNeighborhood?-400:-500):d.tier==="spine"?(isNeighborhood?-120:-150):(isNeighborhood?-50:-60);})).force("center",d3.forceCenter(w/2,h/2).strength(isNeighborhood?0.08:0.04)).force("collide",d3.forceCollide().radius(d=>d.r+(isNeighborhood?12:8)).strength(0.8)).force("x",d3.forceX(w/2).strength(isNeighborhood?0.05:0.025)).force("y",d3.forceY(h/2).strength(isNeighborhood?0.05:0.025));
     // Build radius lookup for line shortening
     const rMap=new Map();nd.forEach(n=>rMap.set(n.id,n.r));
     sim.on("tick",()=>{lk.each(function(d){const sx=d.source.x,sy=d.source.y,tx=d.target.x,ty=d.target.y;const dx=tx-sx,dy=ty-sy,dist=Math.sqrt(dx*dx+dy*dy)||1;const sr=rMap.get(d.source.id)||8,tr=rMap.get(d.target.id)||8;const pad=4;const nx=dx/dist,ny=dy/dist;d3.select(this).attr("x1",sx+nx*(sr+pad)).attr("y1",sy+ny*(sr+pad)).attr("x2",tx-nx*(tr+pad)).attr("y2",ty-ny*(tr+pad));});nk.attr("transform",d=>"translate("+d.x+","+d.y+")");});
     d3Ref.current={nk,lk};
+    // Gentle zoom for neighborhood view — center on focus concept
+    if(isNeighborhood){
+      setTimeout(()=>{
+        const focusNode=nd.find(n=>n.id===expandedConcept);
+        if(focusNode){
+          const scale=1.5;
+          const tx=w/2-focusNode.x*scale,ty=h/2-focusNode.y*scale;
+          svg.transition().duration(800).ease(d3.easeCubicInOut).call(zoom.transform,d3.zoomIdentity.translate(tx,ty).scale(scale));
+        }
+      },600);
+    }
     return()=>sim.stop();
-  },[graph,dims]);
+  },[activeGraph,dims,viewMode]);
 
   useEffect(()=>{
+    if(viewMode!=="graph")return;
     const run=()=>{
     const{nk,lk}=d3Ref.current;if(!nk||!lk)return;
     if(!tourId||!activeTour){nk.selectAll("circle,path").transition().duration(300).attr("opacity",n=>(n.type==="concept"||n.type==="lever"||n.type==="constraint")?1:(n.op||0.6)).attr("stroke-width",n=>n.type==="concept"?2:n.type==="lever"?2:n.type==="constraint"?2:(n.sw||1));nk.selectAll("circle").transition().duration(300).attr("r",n=>n.r);nk.selectAll("text").transition().duration(300).attr("opacity",1);lk.transition().duration(300).attr("opacity",1).attr("stroke-width",l=>{if(ET[l.type]&&ET[l.type].group==="warroom")return 2;return l.type==="foundational"?1.5:l.type==="causes"?1.2:0.8;});return;}
@@ -978,13 +1098,13 @@ export default function App(){
     nk.filter(n=>n.id===cur).selectAll("circle,path").transition().duration(300).attr("stroke-width",4).transition().duration(600).attr("stroke-width",3);
     };
     const raf=requestAnimationFrame(run);return()=>cancelAnimationFrame(raf);
-  },[tourId,tourStep,activeTour,graph,dims]);
+  },[tourId,tourStep,activeTour,activeGraph,dims,viewMode]);
 
-  const clr=()=>{setFDom(null);setFCase(null);setFTier(null);setFEdge(null);setMaxYr(null);setSel(null);setSprintCase(null);};
+  const clr=()=>{setFDom(null);setFCase(null);setFTier(null);setFEdge(null);setMaxYr(null);setSel(null);setSprintCase(null);setExpandedConcept(null);};
   const af=fDom||fCase||fTier||fEdge||maxYr;
   const det=tourId?null:(sel||hov);
   const allEdges=useMemo(()=>{const pe=promotedPapers.flatMap(p=>p.edges||[]);const se=showStudentPapers?studentPapers.flatMap(p=>p.edges||[]):[];return[...edges,...warEdges,...pe,...se];},[studentPapers,showStudentPapers,promotedPapers]);
-  const detEdges=useMemo(()=>{if(!det)return[];const graphIds=new Set(graph.nodes.map(n=>n.id));return allEdges.filter(e=>e.s===det.id||e.t===det.id).map(e=>{const oid=e.s===det.id?e.t:e.s,on=allNodeData.find(n=>n.id===oid);return{...e,otherLabel:on?(on.short||on.label.replace("\n"," ")):oid,dir:e.s===det.id?"out":"in",inGraph:graphIds.has(oid)};}).filter(e=>e.inGraph);},[det,graph,allEdges,allNodeData]);
+  const detEdges=useMemo(()=>{if(!det)return[];const graphIds=new Set(fullGraph.nodes.map(n=>n.id));return allEdges.filter(e=>e.s===det.id||e.t===det.id).map(e=>{const oid=e.s===det.id?e.t:e.s,on=allNodeData.find(n=>n.id===oid);return{...e,otherLabel:on?(on.short||on.label.replace("\n"," ")):oid,dir:e.s===det.id?"out":"in",inGraph:graphIds.has(oid)};}).filter(e=>e.inGraph);},[det,fullGraph,allEdges,allNodeData]);
   const tourStopLabel=useMemo(()=>{if(!activeTour)return"";const s=activeTour.stops[tourStep];if(!s)return"";const n=allNodeData.find(x=>x.id===s.nid);return n?(n.short||n.label.replace("\n"," ")):""},[activeTour,tourStep]);
   const yrPaperCount=useMemo(()=>maxYr?papers.filter(p=>p.yr<=maxYr).length:papers.length,[maxYr]);
   const searchResults=useMemo(()=>{
@@ -993,8 +1113,8 @@ export default function App(){
     return allNodeData.filter(n=>{
       const hay=[n.label,n.short,n.full,n.desc,n.id].filter(Boolean).join(" ").toLowerCase();
       return hay.includes(q);
-    }).slice(0,12).map(n=>({id:n.id,label:n.short||n.label.replace("\n"," "),type:n.type||"concept",yr:n.yr,student:!!n.student,inGraph:graph.nodes.some(gn=>gn.id===n.id)}));
-  },[searchQ,graph,allNodeData]);
+    }).slice(0,12).map(n=>({id:n.id,label:n.short||n.label.replace("\n"," "),type:n.type||"concept",yr:n.yr,student:!!n.student,inGraph:fullGraph.nodes.some(gn=>gn.id===n.id)}));
+  },[searchQ,fullGraph,allNodeData]);
   // Country Sprint data
   const sprintData=useMemo(()=>{
     if(!sprintCase)return null;
@@ -1014,11 +1134,11 @@ export default function App(){
           <span style={{fontSize:22,fontWeight:700,color:warRoom?"#B2EBF2":"#f0e6d8"}}>Growth Miracles</span>
           <button onClick={()=>setShowAbout(true)} style={{width:18,height:18,borderRadius:"50%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",color:"#5a5a6a",fontSize:10,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontFamily:"inherit",lineHeight:1,flexShrink:0}}>{"\u2139"}</button>
           <span style={{fontSize:11,color:"#555",fontWeight:500}}>{warRoom?"War Room":"Knowledge Bank"}</span>
-          <div style={{position:"relative",marginLeft:12,flex:"0 1 220px"}}><input value={searchQ} onChange={e=>{setSearchQ(e.target.value);setSearchOpen(true);}} onFocus={()=>setSearchOpen(true)} onBlur={()=>setTimeout(()=>setSearchOpen(false),200)} placeholder="Search papers, concepts..." style={{width:"100%",padding:"4px 10px 4px 26px",borderRadius:5,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",color:"#d0d0da",fontSize:10,fontFamily:"inherit",outline:"none"}}/><span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#4a4a5a",pointerEvents:"none"}}>{"\uD83D\uDD0D"}</span>{searchOpen&&searchResults.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#1a1b22",border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,maxHeight:280,overflowY:"auto",zIndex:50,boxShadow:"0 8px 24px rgba(0,0,0,0.6)"}}>{searchResults.map(r=><div key={r.id} onMouseDown={e=>{e.preventDefault();setSearchQ("");setSearchOpen(false);const n=graph.nodes.find(nn=>nn.id===r.id);if(n){setSel(n);}else{setFDom(null);setFCase(null);setFTier(null);setFEdge(null);setMaxYr(null);setTimeout(()=>{const n2=allNodeData.find(nn=>nn.id===r.id);if(n2)setSel(n2);},100);}}} style={{padding:"6px 10px",cursor:"pointer",borderBottom:"1px solid rgba(255,255,255,0.04)",display:"flex",alignItems:"center",gap:8}} onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><span style={{fontSize:7,padding:"1px 5px",borderRadius:3,background:r.type==="concept"?"rgba(232,168,56,0.15)":r.type==="lever"?"rgba(0,229,255,0.15)":r.type==="constraint"?"rgba(255,23,68,0.15)":r.student?"rgba(171,71,188,0.15)":"rgba(255,255,255,0.06)",color:r.type==="concept"?"#E8A838":r.type==="lever"?"#00E5FF":r.type==="constraint"?"#FF1744":r.student?"#CE93D8":"#8a8a9a",fontWeight:700,textTransform:"uppercase",flexShrink:0}}>{r.type==="concept"?"C":r.type==="lever"?"L":r.type==="constraint"?"B":r.student?"S":"P"}</span><span style={{fontSize:10,color:r.inGraph?"#d0d0da":"#5a5a6a"}}>{r.label}</span>{r.yr&&<span style={{fontSize:9,color:"#3a3a4a",marginLeft:"auto"}}>{r.yr}</span>}{!r.inGraph&&<span style={{fontSize:7,color:"#4a4a5a",fontStyle:"italic"}}>filtered</span>}</div>)}</div>}</div>
+          <div style={{position:"relative",marginLeft:12,flex:"0 1 220px"}}><input value={searchQ} onChange={e=>{setSearchQ(e.target.value);setSearchOpen(true);}} onFocus={()=>setSearchOpen(true)} onBlur={()=>setTimeout(()=>setSearchOpen(false),200)} placeholder="Search papers, concepts..." style={{width:"100%",padding:"4px 10px 4px 26px",borderRadius:5,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",color:"#d0d0da",fontSize:10,fontFamily:"inherit",outline:"none"}}/><span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#4a4a5a",pointerEvents:"none"}}>{"\uD83D\uDD0D"}</span>{searchOpen&&searchResults.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:"#1a1b22",border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,maxHeight:280,overflowY:"auto",zIndex:50,boxShadow:"0 8px 24px rgba(0,0,0,0.6)"}}>{searchResults.map(r=><div key={r.id} onMouseDown={e=>{e.preventDefault();setSearchQ("");setSearchOpen(false);if(viewMode==="ring"){if(r.type==="concept"){setExpandedConcept(r.id);setViewMode("graph");const cn=allNodeData.find(nn=>nn.id===r.id);if(cn)setSel(cn);setRightPanel(true);}else{const ce=edges.find(ed=>(ed.s===r.id&&ed.t.startsWith("c_"))||(ed.t===r.id&&ed.s.startsWith("c_")));if(ce){const cid=ce.s.startsWith("c_")?ce.s:ce.t;setExpandedConcept(cid);}setViewMode("graph");const pn=allNodeData.find(nn=>nn.id===r.id);if(pn){setSel(pn);setRightPanel(true);}}}else{const n=fullGraph.nodes.find(nn=>nn.id===r.id);if(n){setSel(n);}else{setFDom(null);setFCase(null);setFTier(null);setFEdge(null);setMaxYr(null);setTimeout(()=>{const n2=allNodeData.find(nn=>nn.id===r.id);if(n2)setSel(n2);},100);}}}} style={{padding:"6px 10px",cursor:"pointer",borderBottom:"1px solid rgba(255,255,255,0.04)",display:"flex",alignItems:"center",gap:8}} onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.06)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><span style={{fontSize:7,padding:"1px 5px",borderRadius:3,background:r.type==="concept"?"rgba(232,168,56,0.15)":r.type==="lever"?"rgba(0,229,255,0.15)":r.type==="constraint"?"rgba(255,23,68,0.15)":r.student?"rgba(171,71,188,0.15)":"rgba(255,255,255,0.06)",color:r.type==="concept"?"#E8A838":r.type==="lever"?"#00E5FF":r.type==="constraint"?"#FF1744":r.student?"#CE93D8":"#8a8a9a",fontWeight:700,textTransform:"uppercase",flexShrink:0}}>{r.type==="concept"?"C":r.type==="lever"?"L":r.type==="constraint"?"B":r.student?"S":"P"}</span><span style={{fontSize:10,color:r.inGraph?"#d0d0da":"#5a5a6a"}}>{r.label}</span>{r.yr&&<span style={{fontSize:9,color:"#3a3a4a",marginLeft:"auto"}}>{r.yr}</span>}{!r.inGraph&&<span style={{fontSize:7,color:"#4a4a5a",fontStyle:"italic"}}>filtered</span>}</div>)}</div>}</div>
           <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
             {studentPapers.length>0&&<button onClick={()=>setShowStudentPapers(p=>!p)} style={{padding:"4px 12px",borderRadius:5,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",background:showStudentPapers?"rgba(171,71,188,0.15)":"rgba(171,71,188,0.05)",border:"1px solid "+(showStudentPapers?"rgba(171,71,188,0.3)":"rgba(171,71,188,0.1)"),color:showStudentPapers?"#CE93D8":"#8a6a9a"}}>{showStudentPapers?"\u25C9":"\u25CB"} {studentPapers.length} Pending</button>}
             <button onClick={()=>setProposalOpen(true)} style={{padding:"4px 12px",borderRadius:5,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",background:"rgba(171,71,188,0.08)",border:"1px solid rgba(171,71,188,0.2)",color:"#CE93D8"}}>{"\u002B"} Propose Paper</button>
-            <button onClick={()=>{setWarRoom(w=>!w);setSprintCase(null);setSel(null);}} style={{padding:"4px 12px",borderRadius:5,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",background:warRoom?"rgba(0,229,255,0.15)":"rgba(255,23,68,0.08)",border:warRoom?"1px solid rgba(0,229,255,0.3)":"1px solid rgba(255,23,68,0.15)",color:warRoom?"#00E5FF":"#FF1744"}}>{warRoom?"\u25C9 War Room ON":"\u25CB War Room"}</button>
+            <button onClick={()=>{const nw=!warRoom;setWarRoom(nw);setSprintCase(null);setSel(null);setViewMode(nw?"graph":"ring");setExpandedConcept(null);}} style={{padding:"4px 12px",borderRadius:5,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",background:warRoom?"rgba(0,229,255,0.15)":"rgba(255,23,68,0.08)",border:warRoom?"1px solid rgba(0,229,255,0.3)":"1px solid rgba(255,23,68,0.15)",color:warRoom?"#00E5FF":"#FF1744"}}>{warRoom?"\u25C9 War Room ON":"\u25CB War Room"}</button>
           </div>
         </div>
         <div style={{fontSize:10,color:"#4a4a5a",marginTop:2}}>{concepts.length} concepts &middot; {papers.length} papers &middot; {edges.length} edges{warRoom?<span style={{color:"#00E5FF",marginLeft:8}}>{levers.length} levers &middot; {wrConstraints.length} constraints</span>:null}{showStudentPapers&&studentPapers.length>0?<span style={{color:"#AB47BC",marginLeft:8}}>{studentPapers.length} pending</span>:null}{promotedPapers.length>0?<span style={{color:"#66BB6A",marginLeft:8}}>{promotedPapers.length} promoted</span>:null}</div>
@@ -1026,7 +1146,7 @@ export default function App(){
       <div style={{display:"flex",flex:1,overflow:"hidden",position:"relative"}}>
         <div style={{width:215,minWidth:215,padding:"8px 10px",borderRight:"1px solid rgba(255,255,255,0.04)",overflowY:"auto",flexShrink:0}}>
           <div style={{display:"flex",gap:2,marginBottom:10}}>
-            {["filters","tours"].map(k=><button key={k} onClick={()=>{setTab(k);if(k==="filters"){setTourId(null);setTourStep(0);}}} style={{flex:1,padding:"6px 0",borderRadius:5,background:tab===k?"rgba(255,255,255,0.07)":"transparent",border:tab===k?"1px solid rgba(255,255,255,0.1)":"1px solid transparent",color:tab===k?"#d0d0da":"#4a4a5a",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{k==="filters"?"Filters":"Guided Tours"}</button>)}
+            {["filters","tours"].map(k=><button key={k} onClick={()=>{setTab(k);if(k==="filters"){setTourId(null);setTourStep(0);setViewMode("ring");}}} style={{flex:1,padding:"6px 0",borderRadius:5,background:tab===k?"rgba(255,255,255,0.07)":"transparent",border:tab===k?"1px solid rgba(255,255,255,0.1)":"1px solid transparent",color:tab===k?"#d0d0da":"#4a4a5a",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{k==="filters"?"Filters":"Guided Tours"}</button>)}
           </div>
           {tab==="filters"&&<div>
             {/* COUNTRY SPRINT (War Room only) */}
@@ -1068,23 +1188,34 @@ export default function App(){
           </div>}
           {tab==="tours"&&<div>
             <div style={{fontSize:10,color:"#5a5a6a",lineHeight:1.5,marginBottom:12}}>Guided tours walk through the intellectual plot lines of the field.</div>
-            {tours.map(t=><div key={t.id} onClick={()=>{setTourId(t.id);setTourStep(0);setSel(null);setFDom(null);setFCase(null);setFTier(null);setFEdge(null);setMaxYr(null);setWarRoom(false);setSprintCase(null);}} style={{padding:"8px 10px",marginBottom:4,borderRadius:6,background:tourId===t.id?t.color+"18":"rgba(255,255,255,0.02)",border:"1px solid "+(tourId===t.id?t.color+"44":"rgba(255,255,255,0.04)"),cursor:"pointer"}}><div style={{fontSize:12,fontWeight:600,color:tourId===t.id?t.color:"#c0c0ca"}}>{t.title}</div><div style={{fontSize:9,color:"#5a5a6a",marginTop:2}}>{t.sub}</div><div style={{fontSize:8,color:"#3a3a4a",marginTop:3}}>{t.stops.length} stops</div></div>)}
-            {tourId&&<button onClick={()=>{setTourId(null);setTourStep(0);}} style={{width:"100%",marginTop:8,padding:"5px 10px",borderRadius:5,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",color:"#8a8a9a",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>Exit tour</button>}
+            {tours.map(t=><div key={t.id} onClick={()=>{setTourId(t.id);setTourStep(0);setSel(null);setFDom(null);setFCase(null);setFTier(null);setFEdge(null);setMaxYr(null);setWarRoom(false);setSprintCase(null);setViewMode("graph");setExpandedConcept(null);}} style={{padding:"8px 10px",marginBottom:4,borderRadius:6,background:tourId===t.id?t.color+"18":"rgba(255,255,255,0.02)",border:"1px solid "+(tourId===t.id?t.color+"44":"rgba(255,255,255,0.04)"),cursor:"pointer"}}><div style={{fontSize:12,fontWeight:600,color:tourId===t.id?t.color:"#c0c0ca"}}>{t.title}</div><div style={{fontSize:9,color:"#5a5a6a",marginTop:2}}>{t.sub}</div><div style={{fontSize:8,color:"#3a3a4a",marginTop:3}}>{t.stops.length} stops</div></div>)}
+            {tourId&&<button onClick={()=>{setTourId(null);setTourStep(0);setViewMode("ring");}} style={{width:"100%",marginTop:8,padding:"5px 10px",borderRadius:5,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",color:"#8a8a9a",fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>Exit tour</button>}
           </div>}
         </div>
         <div ref={wrapRef} style={{flex:1,position:"relative",overflow:"hidden"}}>
           <div style={{position:"absolute",top:8,left:12,zIndex:5,display:"flex",gap:12,fontSize:10,color:"#4a4a5a"}}>
-            <span><b style={{color:"#d0d0da"}}>{graph.nodes.filter(n=>n.type==="concept").length}</b> concepts</span>
-            <span><b style={{color:"#d0d0da"}}>{graph.nodes.filter(n=>n.type==="paper"&&!n.student).length}</b> papers</span>
-            {showStudentPapers&&graph.nodes.some(n=>n.student)&&<span><b style={{color:"#AB47BC"}}>{graph.nodes.filter(n=>n.student).length}</b> pending</span>}
-            {warRoom&&<span><b style={{color:"#00E5FF"}}>{graph.nodes.filter(n=>n.type==="lever").length}</b> levers</span>}
-            {warRoom&&<span><b style={{color:"#FF1744"}}>{graph.nodes.filter(n=>n.type==="constraint").length}</b> constraints</span>}
-            <span><b style={{color:"#d0d0da"}}>{graph.links.length}</b> edges</span>
+            {viewMode==="ring"?<>
+              <span><b style={{color:"#d0d0da"}}>{concepts.length}</b> concepts</span>
+              <span><b style={{color:"#5a5a6a"}}>{fullGraph.nodes.filter(n=>n.type==="paper").length}</b> papers</span>
+            </>:<>
+              <span><b style={{color:"#d0d0da"}}>{activeGraph.nodes.filter(n=>n.type==="concept").length}</b> concepts</span>
+              <span><b style={{color:"#d0d0da"}}>{activeGraph.nodes.filter(n=>n.type==="paper"&&!n.student).length}</b> papers</span>
+              {showStudentPapers&&activeGraph.nodes.some(n=>n.student)&&<span><b style={{color:"#AB47BC"}}>{activeGraph.nodes.filter(n=>n.student).length}</b> pending</span>}
+              {warRoom&&<span><b style={{color:"#00E5FF"}}>{activeGraph.nodes.filter(n=>n.type==="lever").length}</b> levers</span>}
+              {warRoom&&<span><b style={{color:"#FF1744"}}>{activeGraph.nodes.filter(n=>n.type==="constraint").length}</b> constraints</span>}
+              <span><b style={{color:"#d0d0da"}}>{activeGraph.links.length}</b> edges</span>
+            </>}
             {maxYr&&<span style={{color:"#E8A838",fontWeight:600}}>{"\u2264"} {maxYr}</span>}
           </div>
           <svg ref={svgRef} width={dims.w} height={dims.h} style={{display:"block",position:"absolute",top:0,left:0,width:"100%",height:"100%"}}/>
+          {viewMode==="ring"&&!activeTour&&<button onClick={()=>{setViewMode("graph");setExpandedConcept(null);}} style={{position:"absolute",bottom:14,right:14,zIndex:10,padding:"8px 16px",borderRadius:8,background:"rgba(232,168,56,0.1)",border:"1px solid rgba(232,168,56,0.2)",color:"#E8A838",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",backdropFilter:"blur(4px)"}}>Explore Full Graph</button>}
+          {viewMode==="graph"&&expandedConcept&&!tourId&&!warRoom&&<div style={{position:"absolute",bottom:14,right:14,zIndex:10,display:"flex",gap:8}}>
+            <button onClick={()=>{setExpandedConcept(null);}} style={{padding:"8px 16px",borderRadius:8,background:"rgba(155,126,212,0.12)",border:"1px solid rgba(155,126,212,0.25)",color:"#9b7ed4",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",backdropFilter:"blur(4px)"}}>Show Full Graph</button>
+            <button onClick={()=>{setViewMode("ring");setExpandedConcept(null);setSel(null);}} style={{padding:"8px 16px",borderRadius:8,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",color:"#9a9aaa",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",backdropFilter:"blur(4px)"}}>Back to Overview</button>
+          </div>}
+          {viewMode==="graph"&&!expandedConcept&&!tourId&&!warRoom&&<button onClick={()=>{setViewMode("ring");setExpandedConcept(null);setSel(null);}} style={{position:"absolute",bottom:14,right:14,zIndex:10,padding:"8px 16px",borderRadius:8,background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",color:"#9a9aaa",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",backdropFilter:"blur(4px)"}}>Back to Overview</button>}
           {activeTour&&<div style={{position:"absolute",bottom:14,left:14,right:14,zIndex:10,background:"rgba(11,12,16,0.94)",backdropFilter:"blur(8px)",border:"1px solid "+activeTour.color+"44",borderRadius:10,padding:"14px 16px"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div><span style={{fontSize:10,fontWeight:700,color:activeTour.color,textTransform:"uppercase",letterSpacing:"1px"}}>{activeTour.title}</span><span style={{fontSize:10,color:"#5a5a6a",marginLeft:10}}>Step {tourStep+1}/{activeTour.stops.length}</span></div><button onClick={()=>{setTourId(null);setTourStep(0);}} style={{background:"none",border:"none",color:"#5a5a6a",cursor:"pointer",fontSize:18,fontFamily:"inherit",padding:"0 4px"}}>{"\u00D7"}</button></div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div><span style={{fontSize:10,fontWeight:700,color:activeTour.color,textTransform:"uppercase",letterSpacing:"1px"}}>{activeTour.title}</span><span style={{fontSize:10,color:"#5a5a6a",marginLeft:10}}>Step {tourStep+1}/{activeTour.stops.length}</span></div><button onClick={()=>{setTourId(null);setTourStep(0);setViewMode("ring");}} style={{background:"none",border:"none",color:"#5a5a6a",cursor:"pointer",fontSize:18,fontFamily:"inherit",padding:"0 4px"}}>{"\u00D7"}</button></div>
             <div style={{display:"flex",gap:3,marginBottom:10}}>{activeTour.stops.map((_,i)=><div key={i} onClick={()=>setTourStep(i)} style={{flex:1,height:3,borderRadius:2,background:i<=tourStep?activeTour.color:"rgba(255,255,255,0.08)",cursor:"pointer"}}/>)}</div>
             <div style={{fontSize:13,fontWeight:600,color:"#f0e6d8",marginBottom:4}}>{tourStopLabel}</div>
             <div style={{fontSize:11,color:"#9a9aaa",lineHeight:1.6,marginBottom:10}}>{activeTour.stops[tourStep].narr}</div>
@@ -1119,7 +1250,7 @@ export default function App(){
               <button onClick={()=>requestAdmin("demote",det.id)} style={{width:"100%",padding:"4px 8px",borderRadius:5,background:"rgba(232,168,56,0.05)",border:"1px solid rgba(232,168,56,0.1)",color:"#E8A83888",fontSize:9,cursor:"pointer",fontFamily:"inherit"}}>{"\uD83D\uDD12"} Demote back to pending</button>
             </div>}
             {det.cases&&det.cases.length>0&&<><Lbl>Cases</Lbl><div style={{display:"flex",flexWrap:"wrap",gap:3,marginBottom:10}}>{det.cases.map(c=><Tag key={c} label={c} active={fCase===c} ac="rgba(91,212,163,0.25)" onClick={()=>setFCase(p=>p===c?null:c)}/>)}</div></>}
-            {detEdges.length>0&&<><Lbl>Relationships ({detEdges.length})</Lbl><div style={{maxHeight:320,overflowY:"auto"}}>{detEdges.map((e,i)=><div key={i} style={{padding:"5px 7px",marginBottom:2,borderRadius:4,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.03)",cursor:"pointer"}} onClick={()=>{const oid=e.s===det.id?e.t:e.s,n=graph.nodes.find(nn=>nn.id===oid);if(n)setSel(n);}}>
+            {detEdges.length>0&&<><Lbl>Relationships ({detEdges.length})</Lbl><div style={{maxHeight:320,overflowY:"auto"}}>{detEdges.map((e,i)=><div key={i} style={{padding:"5px 7px",marginBottom:2,borderRadius:4,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.03)",cursor:"pointer"}} onClick={()=>{const oid=e.s===det.id?e.t:e.s,n=fullGraph.nodes.find(nn=>nn.id===oid);if(n)setSel(n);}}>
               <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}><svg width={12} height={6}><line x1={0} y1={3} x2={12} y2={3} stroke={ET[e.type]?ET[e.type].color:"#888"} strokeWidth={2} strokeDasharray={ET[e.type]?(ET[e.type].dash||"none"):"none"}/></svg><span style={{fontSize:8,color:ET[e.type]?ET[e.type].color:"#888",fontWeight:600,textTransform:"uppercase"}}>{ET[e.type]?ET[e.type].label:e.type}</span><span style={{fontSize:8,color:"#444"}}>{e.dir==="out"?"\u2192":"\u2190"}</span></div>
               <div style={{fontSize:10,color:"#c0c0ca",fontWeight:500}}>{e.otherLabel}</div>
               <div style={{fontSize:9,color:"#5a5a6a",marginTop:1,lineHeight:1.4}}>{e.note}</div>
@@ -1132,7 +1263,7 @@ export default function App(){
             </div>
             {sprintData.constraints.length>0&&<div style={{marginBottom:14}}>
               <div style={{fontSize:9,fontWeight:700,color:"#FF1744",textTransform:"uppercase",letterSpacing:"0.8px",marginBottom:6,display:"flex",alignItems:"center",gap:5}}><svg width={10} height={10}><polygon points="5,0 10,5 5,10 0,5" fill="#FF174444" stroke="#FF1744" strokeWidth={1}/></svg>Binding Constraints ({sprintData.constraints.length})</div>
-              {sprintData.constraints.map(c=>{const blocked=sprintData.mechanisms.filter(m=>m.blocked&&warEdges.some(e=>e.s===c.id&&e.t===m.id&&e.type==="blocks"));const relaxedBy=warEdges.filter(e=>e.t===c.id&&e.type==="relaxes"&&(countryLevers[sprintCase]||[]).includes(e.s)).map(e=>{const lv=levers.find(l=>l.id===e.s);return{label:lv?lv.label.replace("\n"," "):e.s,note:e.note};});return <div key={c.id} style={{padding:"8px 10px",marginBottom:4,borderRadius:6,background:"rgba(255,23,68,0.04)",border:"1px solid rgba(255,23,68,0.12)",cursor:"pointer"}} onClick={()=>{const n=graph.nodes.find(nn=>nn.id===c.id);if(n)setSel(n);}}>
+              {sprintData.constraints.map(c=>{const blocked=sprintData.mechanisms.filter(m=>m.blocked&&warEdges.some(e=>e.s===c.id&&e.t===m.id&&e.type==="blocks"));const relaxedBy=warEdges.filter(e=>e.t===c.id&&e.type==="relaxes"&&(countryLevers[sprintCase]||[]).includes(e.s)).map(e=>{const lv=levers.find(l=>l.id===e.s);return{label:lv?lv.label.replace("\n"," "):e.s,note:e.note};});return <div key={c.id} style={{padding:"8px 10px",marginBottom:4,borderRadius:6,background:"rgba(255,23,68,0.04)",border:"1px solid rgba(255,23,68,0.12)",cursor:"pointer"}} onClick={()=>{const n=fullGraph.nodes.find(nn=>nn.id===c.id);if(n)setSel(n);}}>
                 <div style={{fontSize:11,fontWeight:600,color:"#FFCDD2"}}>{c.label.replace("\n"," ")}</div>
                 <div style={{fontSize:9,color:"#7a6a6a",lineHeight:1.5,marginTop:2}}>{c.desc}</div>
                 {blocked.length>0&&<div style={{marginTop:4}}>{blocked.map(m=><div key={m.id} style={{fontSize:8,color:"#FF5252",display:"flex",alignItems:"center",gap:3}}><span style={{opacity:0.6}}>{"\u26D4"}</span> Blocks {m.label.replace("\n"," ")}</div>)}</div>}
@@ -1141,7 +1272,7 @@ export default function App(){
             </div>}
             {sprintData.levers.length>0&&<div style={{marginBottom:14}}>
               <div style={{fontSize:9,fontWeight:700,color:"#00E5FF",textTransform:"uppercase",letterSpacing:"0.8px",marginBottom:6,display:"flex",alignItems:"center",gap:5}}><svg width={12} height={10}><polygon points="3,0 9,0 12,5 9,10 3,10 0,5" fill="#00E5FF22" stroke="#00E5FF" strokeWidth={1}/></svg>Levers Attempted ({sprintData.levers.length})</div>
-              {sprintData.levers.map(l=>{const activates=warEdges.filter(e=>e.s===l.id&&e.type==="activates").map(e=>{const cn=concepts.find(c=>c.id===e.t);return{label:cn?cn.label.replace("\n"," "):e.t,note:e.note};});const relaxes=warEdges.filter(e=>e.s===l.id&&e.type==="relaxes"&&(countryConstraints[sprintCase]||[]).some(cid=>cid===e.t)).map(e=>{const cn=wrConstraints.find(c=>c.id===e.t);return{label:cn?cn.label.replace("\n"," "):e.t,note:e.note};});return <div key={l.id} style={{padding:"8px 10px",marginBottom:4,borderRadius:6,background:"rgba(0,229,255,0.04)",border:"1px solid rgba(0,229,255,0.12)",cursor:"pointer"}} onClick={()=>{const n=graph.nodes.find(nn=>nn.id===l.id);if(n)setSel(n);}}>
+              {sprintData.levers.map(l=>{const activates=warEdges.filter(e=>e.s===l.id&&e.type==="activates").map(e=>{const cn=concepts.find(c=>c.id===e.t);return{label:cn?cn.label.replace("\n"," "):e.t,note:e.note};});const relaxes=warEdges.filter(e=>e.s===l.id&&e.type==="relaxes"&&(countryConstraints[sprintCase]||[]).some(cid=>cid===e.t)).map(e=>{const cn=wrConstraints.find(c=>c.id===e.t);return{label:cn?cn.label.replace("\n"," "):e.t,note:e.note};});return <div key={l.id} style={{padding:"8px 10px",marginBottom:4,borderRadius:6,background:"rgba(0,229,255,0.04)",border:"1px solid rgba(0,229,255,0.12)",cursor:"pointer"}} onClick={()=>{const n=fullGraph.nodes.find(nn=>nn.id===l.id);if(n)setSel(n);}}>
                 <div style={{fontSize:11,fontWeight:600,color:"#B2EBF2"}}>{l.label.replace("\n"," ")}</div>
                 <div style={{fontSize:9,color:"#6a7a7a",lineHeight:1.5,marginTop:2}}>{l.desc}</div>
                 {activates.length>0&&<div style={{marginTop:4}}>{activates.map((a,i)=><div key={i} style={{fontSize:8,color:"#00E5FF",display:"flex",alignItems:"center",gap:3}}><span>{"\u2192"}</span> Activates {a.label}</div>)}</div>}
@@ -1150,7 +1281,7 @@ export default function App(){
             </div>}
             {sprintData.mechanisms.length>0&&<div style={{marginBottom:14}}>
               <div style={{fontSize:9,fontWeight:700,color:"#E8A838",textTransform:"uppercase",letterSpacing:"0.8px",marginBottom:6}}>Mechanism Chains ({sprintData.mechanisms.length})</div>
-              {sprintData.mechanisms.map(m=><div key={m.id} style={{padding:"6px 10px",marginBottom:3,borderRadius:5,background:"rgba(232,168,56,0.04)",border:"1px solid rgba(232,168,56,0.1)",cursor:"pointer"}} onClick={()=>{const n=graph.nodes.find(nn=>nn.id===m.id);if(n)setSel(n);}}>
+              {sprintData.mechanisms.map(m=><div key={m.id} style={{padding:"6px 10px",marginBottom:3,borderRadius:5,background:"rgba(232,168,56,0.04)",border:"1px solid rgba(232,168,56,0.1)",cursor:"pointer"}} onClick={()=>{const n=fullGraph.nodes.find(nn=>nn.id===m.id);if(n)setSel(n);}}>
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   {m.activated&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:3,background:"rgba(0,229,255,0.15)",color:"#00E5FF",fontWeight:600}}>ACTIVATED</span>}
                   {m.blocked&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:3,background:"rgba(255,23,68,0.15)",color:"#FF1744",fontWeight:600}}>BLOCKED</span>}
@@ -1160,12 +1291,17 @@ export default function App(){
             </div>}
             {sprintData.papers.length>0&&<div>
               <div style={{fontSize:9,fontWeight:700,color:"#9a9aaa",textTransform:"uppercase",letterSpacing:"0.8px",marginBottom:6}}>Key Papers ({sprintData.papers.length})</div>
-              {sprintData.papers.map(p=><div key={p.id} style={{padding:"5px 8px",marginBottom:2,borderRadius:4,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.03)",cursor:"pointer",fontSize:10,color:"#a0a0b0"}} onClick={()=>{const n=graph.nodes.find(nn=>nn.id===p.id);if(n)setSel(n);}}>{p.short||p.label}</div>)}
+              {sprintData.papers.map(p=><div key={p.id} style={{padding:"5px 8px",marginBottom:2,borderRadius:4,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.03)",cursor:"pointer",fontSize:10,color:"#a0a0b0"}} onClick={()=>{const n=fullGraph.nodes.find(nn=>nn.id===p.id);if(n)setSel(n);}}>{p.short||p.label}</div>)}
             </div>}
           </div>:<div style={{textAlign:"center",paddingTop:40}}>
             <div style={{fontSize:32,marginBottom:8,opacity:0.2}}>{"\uD83C\uDF10"}</div>
-            <div style={{fontSize:12,color:"#5a5a6a",lineHeight:1.6,marginBottom:10}}>Hover or click any node.</div>
-            <div style={{fontSize:10,color:"#3a3a4a",lineHeight:1.6}}><b style={{color:"#555"}}>Glowing</b> = concepts<br/><b style={{color:"#555"}}>Large filled</b> = canonical spine<br/><b style={{color:"#555"}}>Arrows</b> = typed edges<br/>Try <b style={{color:"#E8A838"}}>Guided Tours</b> or the <b style={{color:"#E8A838"}}>Timeline slider</b>.{!warRoom&&<span><br/><br/>Toggle <b style={{color:"#00E5FF"}}>War Room</b> for policy levers, constraints, and country diagnostics.</span>}{warRoom&&!sprintCase&&<span><br/><br/>Select a <b style={{color:"#00E5FF"}}>Country Sprint</b> in the left panel to see diagnostic chains.</span>}</div>
+            {viewMode==="ring"?<>
+              <div style={{fontSize:12,color:"#5a5a6a",lineHeight:1.6,marginBottom:10}}>Click a concept to explore its neighborhood.</div>
+              <div style={{fontSize:10,color:"#3a3a4a",lineHeight:1.6}}>The ring shows <b style={{color:"#555"}}>{concepts.length} key concepts</b> grouped by domain. Click any concept to dive into the full graph focused on its neighborhood.<br/><br/>Try <b style={{color:"#E8A838"}}>Guided Tours</b> for narrated paths, or <b style={{color:"#E8A838"}}>Explore Full Graph</b> to see all {papers.length} papers at once.</div>
+            </>:<>
+              <div style={{fontSize:12,color:"#5a5a6a",lineHeight:1.6,marginBottom:10}}>Hover or click any node.</div>
+              <div style={{fontSize:10,color:"#3a3a4a",lineHeight:1.6}}><b style={{color:"#555"}}>Glowing</b> = concepts<br/><b style={{color:"#555"}}>Large filled</b> = canonical spine<br/><b style={{color:"#555"}}>Arrows</b> = typed edges<br/>Try <b style={{color:"#E8A838"}}>Guided Tours</b> or the <b style={{color:"#E8A838"}}>Timeline slider</b>.{!warRoom&&<span><br/><br/>Toggle <b style={{color:"#00E5FF"}}>War Room</b> for policy levers, constraints, and country diagnostics.</span>}{warRoom&&!sprintCase&&<span><br/><br/>Select a <b style={{color:"#00E5FF"}}>Country Sprint</b> in the left panel to see diagnostic chains.</span>}</div>
+            </>}
             <div style={{marginTop:16,padding:10,borderRadius:6,background:"rgba(255,255,255,0.02)",border:"1px solid rgba(255,255,255,0.04)",textAlign:"left"}}>
               <div style={{fontSize:8,color:"#555",fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginBottom:6}}>Edge Types</div>
               {Object.entries(ET).map(([k,v])=><div key={k} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,fontSize:9,color:"#5a5a6a"}}><svg width={16} height={6}><line x1={0} y1={3} x2={16} y2={3} stroke={v.color} strokeWidth={2} strokeDasharray={v.dash||"none"}/></svg>{v.label}</div>)}
