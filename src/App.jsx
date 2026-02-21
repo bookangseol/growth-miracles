@@ -24,26 +24,19 @@ const DOM={
 };
 
 const concepts=[
-  {id:"c_growth",label:"Growth\nAccounting",desc:"Decomposing output into capital, labor, and residual TFP.",domain:"growth"},
-  {id:"c_endog",label:"Endogenous\nGrowth",desc:"Ideas, innovation, and human capital as engines of self-sustaining growth.",domain:"growth"},
+  {id:"c_growth",label:"Growth\nTheory",desc:"Accounting, endogenous growth, diagnostics, and the middle-income trap.",domain:"growth"},
   {id:"c_struct",label:"Structural\nTransformation",desc:"Reallocation from agriculture to industry and services.",domain:"struct"},
-  {id:"c_inst",label:"Institutions\n& Growth",desc:"Property rights, rule of law, and political institutions shaping trajectories.",domain:"inst"},
-  {id:"c_diag",label:"Growth\nDiagnostics",desc:"Identifying the most binding constraints on growth.",domain:"growth"},
+  {id:"c_inst",label:"Institutions\n& History",desc:"Property rights, rule of law, political economy, colonial legacies, and deep determinants.",domain:"inst"},
   {id:"c_indpol",label:"Industrial\nPolicy",desc:"Government intervention to accelerate industrialization.",domain:"state"},
   {id:"c_devstate",label:"Developmental\nState",desc:"Bureaucratic capacity and embedded autonomy enabling effective intervention.",domain:"state"},
-  {id:"c_trade",label:"Export-Led\nGrowth",desc:"World market integration driving productivity through competition and learning.",domain:"trade"},
-  {id:"c_tech",label:"Technology\nDiffusion",desc:"How frontier technologies spread or fail to spread.",domain:"tech"},
-  {id:"c_fdi",label:"FDI &\nMNCs",desc:"Multinational supply chains, backward linkages, and technology transfer.",domain:"trade"},
+  {id:"c_trade",label:"Trade &\nIntegration",desc:"Export-led growth, FDI spillovers, and world market integration.",domain:"trade"},
+  {id:"c_tech",label:"Technology &\nFuture",desc:"How frontier technologies spread, and whether growth miracles can still happen under automation and climate change.",domain:"tech"},
   {id:"c_human",label:"Human\nCapital",desc:"Education, skills, health as drivers of productivity.",domain:"human"},
   {id:"c_demog",label:"Demographic\nDividend",desc:"Population structure interacting with growth.",domain:"human"},
-  {id:"c_polec",label:"Political\nEconomy",desc:"Coalitions, corruption, credibility, and the politics of reform.",domain:"inst"},
   {id:"c_infra",label:"Infrastructure\n& Linkages",desc:"Physical and social infrastructure, coordination problems, linkages.",domain:"struct"},
   {id:"c_social",label:"Social Capital\n& Trust",desc:"Trust, civic norms, fractionalization, and collective action.",domain:"social"},
   {id:"c_env",label:"Environment\n& Growth",desc:"Environmental Kuznets Curve and sustainability constraints.",domain:"env"},
   {id:"c_finance",label:"Financial\nDevelopment",desc:"Financial systems, credit allocation, and crisis vulnerability.",domain:"finance"},
-  {id:"c_mit",label:"Middle-Income\nTrap",desc:"Why fast-growing economies slow down.",domain:"growth"},
-  {id:"c_future",label:"Future of\nMiracles",desc:"Can growth miracles still happen under automation and climate?",domain:"tech"},
-  {id:"c_geo",label:"Geography &\nHistory",desc:"Colonial legacies and deep roots of comparative development.",domain:"inst"},
 ];
 
 // WAR ROOM: POLICY LEVERS
@@ -115,8 +108,7 @@ const warEdges = [
   {s:"l_export_sub",t:"c_trade",type:"activates",note:"Subsidies push firms into export markets"},
   {s:"l_dir_credit",t:"c_indpol",type:"activates",note:"Cheap capital enables state to fund priority sectors"},
   {s:"l_dir_credit",t:"c_finance",type:"activates",note:"Policy lending mobilizes savings toward investment"},
-  {s:"l_sez",t:"c_fdi",type:"activates",note:"Tax-free zones attract MNCs and supply chains"},
-  {s:"l_sez",t:"c_trade",type:"activates",note:"Zones create export platforms"},
+  {s:"l_sez",t:"c_trade",type:"activates",note:"Tax-free zones attract MNCs and create export platforms"},
   {s:"l_tvet",t:"c_human",type:"activates",note:"Vocational training builds absorptive capacity"},
   {s:"l_procurement",t:"c_indpol",type:"activates",note:"Guaranteed demand creates scale for infant industries"},
   {s:"l_exchange",t:"c_trade",type:"activates",note:"Cheap currency makes exports competitive"},
@@ -275,31 +267,27 @@ const edges=[
   // Concept-Concept
   {s:"c_struct",t:"c_growth",type:"causes",note:"Reallocation drives aggregate productivity"},
   {s:"c_inst",t:"c_growth",type:"causes",note:"Institutions shape incentives for investment"},
-  {s:"c_endog",t:"c_growth",type:"extends",note:"Ideas make growth self-sustaining"},
   {s:"c_trade",t:"c_struct",type:"causes",note:"Export competition forces sectoral upgrading"},
   {s:"c_indpol",t:"c_struct",type:"causes",note:"Policy directs resources to high-productivity sectors"},
   {s:"c_devstate",t:"c_indpol",type:"enables",note:"State capacity precondition for IP"},
   {s:"c_tech",t:"c_struct",type:"causes",note:"Tech adoption raises within-sector productivity"},
-  {s:"c_fdi",t:"c_tech",type:"enables",note:"MNCs transfer technology through supply chains"},
+  {s:"c_trade",t:"c_tech",type:"enables",note:"MNCs transfer technology through supply chains"},
   {s:"c_human",t:"c_tech",type:"enables",note:"Education enables technology absorption"},
   {s:"c_human",t:"c_growth",type:"causes",note:"Skills drive labor productivity"},
   {s:"c_demog",t:"c_growth",type:"causes",note:"Working-age bulge boosts saving and output"},
-  {s:"c_polec",t:"c_indpol",type:"enables",note:"Coalitions determine policy feasibility"},
+  {s:"c_inst",t:"c_indpol",type:"enables",note:"Coalitions determine policy feasibility"},
   {s:"c_social",t:"c_infra",type:"enables",note:"Social capital enables collective provision"},
   {s:"c_infra",t:"c_struct",type:"enables",note:"Infrastructure reduces transaction costs"},
   {s:"c_finance",t:"c_growth",type:"causes",note:"Financial systems mobilize savings"},
   {s:"c_env",t:"c_growth",type:"challenges",note:"Environmental costs constrain growth"},
-  {s:"c_mit",t:"c_growth",type:"challenges",note:"Institutional stagnation stalls catch-up"},
-  {s:"c_future",t:"c_trade",type:"challenges",note:"Automation may close manufacturing pathway"},
-  {s:"c_polec",t:"c_inst",type:"causes",note:"Political dynamics shape institutions"},
-  {s:"c_geo",t:"c_inst",type:"causes",note:"Historical legacies shape institutions"},
-  {s:"c_geo",t:"c_growth",type:"challenges",note:"Geography constrains via disease, transport"},
+  {s:"c_tech",t:"c_trade",type:"challenges",note:"Automation may close manufacturing pathway"},
+  {s:"c_inst",t:"c_growth",type:"challenges",note:"Geography constrains via disease, transport"},
   {s:"c_trade",t:"c_tech",type:"enables",note:"Exporting exposes firms to frontier tech"},
   {s:"c_finance",t:"c_indpol",type:"enables",note:"Directed credit as IP tool"},
   // Paper → Concept foundational
   {s:"solow57",t:"c_growth",type:"foundational",note:"Created growth accounting framework"},
   {s:"halljones99",t:"c_growth",type:"foundational",note:"Institutions explain TFP differences"},
-  {s:"romer90",t:"c_endog",type:"foundational",note:"Ideas as nonrival goods"},
+  {s:"romer90",t:"c_growth",type:"foundational",note:"Ideas as nonrival goods"},
   {s:"mankiw92",t:"c_growth",type:"extends",note:"Augmented Solow with human capital"},
   {s:"barro91",t:"c_growth",type:"foundational",note:"Launched cross-country growth regressions"},
   {s:"gerschenkron62",t:"c_growth",type:"foundational",note:"Advantages of backwardness"},
@@ -308,29 +296,29 @@ const edges=[
   {s:"north91",t:"c_inst",type:"foundational",note:"Defined institutions as rules of the game"},
   {s:"lewis54",t:"c_struct",type:"foundational",note:"Dual economy: surplus labor transfer"},
   {s:"mcmrodrik11",t:"c_struct",type:"foundational",note:"Within vs. between sector decomposition"},
-  {s:"hrv05",t:"c_diag",type:"foundational",note:"Decision tree for binding constraints"},
+  {s:"hrv05",t:"c_growth",type:"foundational",note:"Decision tree for binding constraints"},
   {s:"amsden89",t:"c_devstate",type:"foundational",note:"Korea disciplined subsidized firms"},
   {s:"amsden89",t:"c_indpol",type:"foundational",note:"Reciprocal discipline in IP"},
   {s:"johnson82",t:"c_devstate",type:"foundational",note:"Defined developmental state with MITI"},
   {s:"evans95",t:"c_devstate",type:"foundational",note:"Embedded autonomy concept"},
   {s:"melitz03",t:"c_trade",type:"foundational",note:"Trade selects productive firms"},
-  {s:"javorcik04",t:"c_fdi",type:"foundational",note:"FDI spillovers via backward linkages"},
+  {s:"javorcik04",t:"c_trade",type:"foundational",note:"FDI spillovers via backward linkages"},
   {s:"moscona23",t:"c_tech",type:"foundational",note:"Technology fails in wrong conditions"},
   {s:"reinhart09",t:"c_finance",type:"foundational",note:"Recurring financial crisis patterns"},
-  {s:"rodrik16",t:"c_mit",type:"foundational",note:"Deindustrializing before getting rich"},
+  {s:"rodrik16",t:"c_growth",type:"foundational",note:"Deindustrializing before getting rich"},
   {s:"gk95",t:"c_env",type:"foundational",note:"Environmental Kuznets Curve"},
   {s:"hirschman58",t:"c_infra",type:"foundational",note:"Unbalanced growth and linkages"},
   {s:"bloomwilliamson98",t:"c_demog",type:"foundational",note:"Demographic dividend in East Asia"},
   {s:"hanushek12",t:"c_human",type:"foundational",note:"Cognitive skills drive growth"},
-  {s:"nunn08",t:"c_geo",type:"foundational",note:"Slave trade destroyed trust and institutions"},
-  {s:"dell10",t:"c_geo",type:"applies",note:"Colonial mita persists via institutions"},
-  {s:"sachs03",t:"c_geo",type:"foundational",note:"Geography directly affects income"},
+  {s:"nunn08",t:"c_inst",type:"foundational",note:"Slave trade destroyed trust and institutions"},
+  {s:"dell10",t:"c_inst",type:"applies",note:"Colonial mita persists via institutions"},
+  {s:"sachs03",t:"c_inst",type:"foundational",note:"Geography directly affects income"},
   {s:"easterly97",t:"c_social",type:"foundational",note:"Ethnic divisions destroy growth"},
   {s:"alesina03",t:"c_social",type:"foundational",note:"Defined fractionalization"},
   {s:"banerjeeduflo05",t:"c_growth",type:"challenges",note:"Macro theory misses heterogeneity"},
   {s:"banerjeeduflo05",t:"c_struct",type:"extends",note:"Micro evidence on structural change"},
   {s:"algan10",t:"c_social",type:"foundational",note:"Inherited trust explains growth gaps"},
-  {s:"acemoglurestrepo20",t:"c_future",type:"foundational",note:"Automation displaces routine labor"},
+  {s:"acemoglurestrepo20",t:"c_tech",type:"foundational",note:"Automation displaces routine labor"},
   {s:"song11",t:"c_struct",type:"applies",note:"Modeled China SOE-to-private reallocation"},
   {s:"kinglevine93",t:"c_finance",type:"foundational",note:"Financial depth predicts growth"},
   {s:"laportaetal98",t:"c_finance",type:"foundational",note:"Legal origins shape finance"},
@@ -344,13 +332,12 @@ const edges=[
   {s:"donaldson18",t:"c_infra",type:"foundational",note:"Transport infrastructure massively reduces trade costs"},
   // Paper → Concept extends/applies/challenges
   {s:"ar12",t:"c_inst",type:"extends",note:"Inclusive vs. extractive institutions"},
-  {s:"ar12",t:"c_polec",type:"extends",note:"Political origins of persistence"},
   {s:"lane22",t:"c_indpol",type:"applies",note:"Causal evidence on Korea HCI via RDD"},
   {s:"atkin17exp",t:"c_trade",type:"applies",note:"RCT: exporting raises quality"},
   {s:"hsiehklenow09",t:"c_struct",type:"applies",note:"Misallocation costs in China and India"},
-  {s:"besleypersson11",t:"c_polec",type:"extends",note:"State capacity endogenous to politics"},
+  {s:"besleypersson11",t:"c_inst",type:"extends",note:"State capacity endogenous to politics"},
   {s:"besleypersson11",t:"c_devstate",type:"extends",note:"Fiscal/legal capacity clusters"},
-  {s:"rodrik18",t:"c_future",type:"extends",note:"GVCs may close manufacturing pathway"},
+  {s:"rodrik18",t:"c_tech",type:"extends",note:"GVCs may close manufacturing pathway"},
   {s:"park17",t:"c_env",type:"case_of",note:"Korea reforestation as state capacity"},
   {s:"adh13",t:"c_trade",type:"challenges",note:"Trade destroyed US manufacturing jobs"},
   {s:"glaeser04",t:"c_inst",type:"challenges",note:"Human capital causes growth, not institutions"},
@@ -460,7 +447,7 @@ const edges=[
   {s:"diao19",t:"mcmrodrik11",type:"extends",note:"Updated decomposition for recent African growth"},
   {s:"rodriguezclare01",t:"c_trade",type:"case_of",note:"Costa Rica's FDI-led development strategy"},
   {s:"rodriguezclare01",t:"javorcik04",type:"foundational",note:"Early Costa Rica FDI case study"},
-  {s:"growthreport08",t:"c_diag",type:"extends",note:"Policy synthesis of growth diagnostics"},
+  {s:"growthreport08",t:"c_growth",type:"extends",note:"Policy synthesis of growth diagnostics"},
   {s:"growthreport08",t:"hrv05",type:"extends",note:"Applied diagnostics to growth commission"},
   // New finance paper edges
   {s:"rajanzingales98",t:"c_finance",type:"foundational",note:"Industry-level evidence that finance causes growth"},
@@ -529,7 +516,7 @@ const tours=[
     {nid:"acemoglurestrepo20",narr:"Acemoglu & Restrepo (2020): automation accelerates this\u2014robots replace the routine tasks that powered earlier miracles."},
     {nid:"reinhart09",narr:"Reinhart & Rogoff (2009): financial crises. Liberalize, boom, bust, lost decade."},
     {nid:"ar12",narr:"Acemoglu & Robinson: extractive elites block creative destruction. Miracles end when institutions fail to evolve."},
-    {nid:"c_future",narr:"If manufacturing is closing, what replaces it? Services-led growth? Green industrialization? The next miracle may look different."},
+    {nid:"c_tech",narr:"If manufacturing is closing, what replaces it? Services-led growth? Green industrialization? The next miracle may look different."},
   ]},
   {id:"t_solow",title:"The Growth Accounting Tree",sub:"From Solow's residual to the modern decomposition",color:"#E8A838",
    stops:[
@@ -863,6 +850,7 @@ export default function App(){
   const [viewMode,setViewMode]=useState("ring"); // "ring" | "graph"
   const [expandedConcept,setExpandedConcept]=useState(null); // concept id | null
   const [rightPanel,setRightPanel]=useState(true);
+  const [isMobile,setIsMobile]=useState(typeof window!=="undefined"&&window.innerWidth<640);
   const [showStudentPapers,setShowStudentPapers]=useState(false);
   const [studentPapers,setStudentPapers]=useState([]);
   const [promotedPapers,setPromotedPapers]=useState([]);
@@ -918,6 +906,7 @@ export default function App(){
   const allNodeData=useMemo(()=>[...baseNodeData,...promotedPapers.map(p=>({id:p.id,type:"paper",label:p.short||p.title,short:p.short||p.title,full:p.full||p.title,domain:p.domain,tier:p.tier,cases:p.cases||[],yr:p.yr,promoted:true})),...(showStudentPapers?studentPapers.map(p=>({id:p.id,type:"paper",label:p.short||p.title,short:p.short||p.title,full:p.full||p.title,domain:p.domain,tier:p.tier,cases:p.cases||[],yr:p.yr,student:true})):[])],[studentPapers,showStudentPapers,promotedPapers]);
   useEffect(()=>{tourIdRef.current=tourId;},[tourId]);
   useEffect(()=>{const h=e=>{if(e.key==="Escape")setShowAbout(false);};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);},[]);
+  useEffect(()=>{const h=()=>setIsMobile(window.innerWidth<640);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
   const activeTour=useMemo(()=>tours.find(t=>t.id===tourId)||null,[tourId]);
   const fullGraph=useMemo(()=>buildGraph(fDom,fCase,fTier,fEdge,maxYr,warRoom,sprintCase,studentPapers,showStudentPapers,promotedPapers),[fDom,fCase,fTier,fEdge,maxYr,warRoom,sprintCase,studentPapers,showStudentPapers,promotedPapers]);
   const activeGraph=useMemo(()=>{
@@ -1021,6 +1010,12 @@ export default function App(){
     const fl=defs.append("filter").attr("id","glow").attr("x","-50%").attr("y","-50%").attr("width","200%").attr("height","200%");
     fl.append("feGaussianBlur").attr("stdDeviation","5").attr("result","b");
     const fm=fl.append("feMerge");fm.append("feMergeNode").attr("in","b");fm.append("feMergeNode").attr("in","SourceGraphic");
+    // Selected concept glow (stronger)
+    const flSel=defs.append("filter").attr("id","glow-selected").attr("x","-60%").attr("y","-60%").attr("width","220%").attr("height","220%");
+    flSel.append("feGaussianBlur").attr("stdDeviation","8").attr("result","b");
+    const fmSel=flSel.append("feMerge");fmSel.append("feMergeNode").attr("in","b");fmSel.append("feMergeNode").attr("in","SourceGraphic");
+    // Pulse animation for selected concept
+    if(expandedConcept){svg.append("style").text("@keyframes conceptPulse{0%,100%{stroke-width:3.5px}50%{stroke-width:4.5px}}.sel-pulse{animation:conceptPulse 2.4s ease-in-out infinite}");}
     Object.entries(ET).forEach(([k,v])=>{defs.append("marker").attr("id","a-"+k).attr("viewBox","0 -3 6 6").attr("refX",6).attr("refY",0).attr("markerWidth",5).attr("markerHeight",5).attr("orient","auto").append("path").attr("d","M0,-3L6,0L0,3").attr("fill",v.color+"88");});
     // Lever glow
     const fl2=defs.append("filter").attr("id","glow-lever").attr("x","-50%").attr("y","-50%").attr("width","200%").attr("height","200%");
@@ -1032,8 +1027,8 @@ export default function App(){
     fl3.append("feComposite").attr("in","c").attr("in2","b").attr("operator","in").attr("result","d");const fm3=fl3.append("feMerge");fm3.append("feMergeNode").attr("in","d");fm3.append("feMergeNode").attr("in","SourceGraphic");
     const lk=g.append("g").selectAll("line").data(ld).join("line").attr("stroke",d=>d.student?"#AB47BC66":ET[d.type]?ET[d.type].color+(ET[d.type].group==="warroom"?"88":"44"):"#44444444").attr("stroke-width",d=>{if(d.student)return 1.2;if(ET[d.type]&&ET[d.type].group==="warroom")return 2;return d.type==="foundational"?1.5:d.type==="causes"?1.2:0.8;}).attr("stroke-dasharray",d=>d.student?"4,3":(ET[d.type]?ET[d.type].dash:null)).attr("marker-end",d=>"url(#a-"+d.type+")");
     const nk=g.append("g").selectAll("g").data(nd).join("g").style("cursor","pointer");
-    nk.filter(d=>d.type==="concept").append("circle").attr("r",d=>d.r+4).attr("fill",d=>d.color+"08").attr("stroke",d=>d.color+"33").attr("stroke-width",1);
-    nk.filter(d=>d.type==="concept").append("circle").attr("r",d=>d.r).attr("fill",d=>d.color+"30").attr("stroke",d=>d.color).attr("stroke-width",2.5).attr("filter","url(#glow)");
+    nk.filter(d=>d.type==="concept").append("circle").attr("r",d=>d.r+4).attr("fill",d=>expandedConcept&&d.id===expandedConcept?d.color+"18":d.color+"08").attr("stroke",d=>expandedConcept&&d.id===expandedConcept?d.color+"66":d.color+"33").attr("stroke-width",d=>expandedConcept&&d.id===expandedConcept?2:1);
+    nk.filter(d=>d.type==="concept").append("circle").attr("r",d=>d.r).attr("fill",d=>expandedConcept&&d.id===expandedConcept?d.color+"50":d.color+"30").attr("stroke",d=>d.color).attr("stroke-width",d=>expandedConcept&&d.id===expandedConcept?4:2.5).attr("filter",d=>expandedConcept&&d.id===expandedConcept?"url(#glow-selected)":"url(#glow)").classed("sel-pulse",d=>expandedConcept&&d.id===expandedConcept);
     nk.filter(d=>d.type==="paper"&&!d.student).append("circle").attr("r",d=>d.r).attr("fill",d=>d.tier==="spine"?d.color+"dd":d.tier==="frontier"?d.color+"88":"#16161e").attr("stroke",d=>d.color).attr("stroke-width",d=>d.sw||1).attr("opacity",d=>d.op||0.6);
     nk.filter(d=>d.type==="paper"&&d.student).append("circle").attr("r",d=>d.r).attr("fill","#16161e").attr("stroke",d=>d.color).attr("stroke-width",1.5).attr("stroke-dasharray","3,2").attr("opacity",0.7);
     nk.filter(d=>d.type==="paper"&&d.student).append("text").text("\u2709").attr("text-anchor","middle").attr("dy",d=>-(d.r+4)).attr("font-size","7px").attr("fill","#AB47BC").attr("pointer-events","none");
@@ -1055,7 +1050,7 @@ export default function App(){
       d3.select(this).select("circle,path").transition().duration(150).attr("stroke-width",3);
     }).on("mouseleave",function(ev,d){
       if(tourIdRef.current)return;setHov(null);
-      nk.selectAll("circle,path").transition().duration(250).attr("opacity",n=>(n.type==="concept"||n.type==="lever"||n.type==="constraint")?1:(n.op||0.6)).attr("stroke-width",n=>n.type==="concept"?2:n.type==="lever"?2:n.type==="constraint"?2:(n.sw||1));
+      nk.selectAll("circle,path").transition().duration(250).attr("opacity",n=>(n.type==="concept"||n.type==="lever"||n.type==="constraint")?1:(n.op||0.6)).attr("stroke-width",n=>n.type==="concept"?(expandedConcept&&n.id===expandedConcept?4:2):n.type==="lever"?2:n.type==="constraint"?2:(n.sw||1));
       nk.selectAll("circle").transition().duration(250).attr("r",n=>n.r);
       nk.selectAll("text").transition().duration(250).attr("opacity",1);
       lk.transition().duration(250).attr("opacity",1).attr("stroke-width",l=>{if(ET[l.type]&&ET[l.type].group==="warroom")return 2;return l.type==="foundational"?1.5:l.type==="causes"?1.2:0.8;});
@@ -1225,8 +1220,8 @@ export default function App(){
             </div>
           </div>}
         </div>
-        <button onClick={()=>setRightPanel(p=>!p)} style={{position:"absolute",right:rightPanel?260:0,top:"50%",transform:"translateY(-50%)",zIndex:20,width:20,height:48,borderRadius:rightPanel?"6px 0 0 6px":"0 6px 6px 0",background:"rgba(30,31,40,0.9)",border:"1px solid rgba(255,255,255,0.08)",borderRight:rightPanel?"none":"1px solid rgba(255,255,255,0.08)",borderLeft:rightPanel?"1px solid rgba(255,255,255,0.08)":"none",color:"#6a6a7a",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,transition:"right 0.2s ease"}}>{rightPanel?"\u203A":"\u2039"}</button>
-        {rightPanel&&<div style={{width:260,minWidth:260,padding:"14px 12px",borderLeft:"1px solid rgba(255,255,255,0.04)",overflowY:"auto",flexShrink:0}}>
+        {(!isMobile||!rightPanel)&&<button onClick={()=>setRightPanel(p=>!p)} style={{position:"absolute",right:isMobile?0:(rightPanel?260:0),top:"50%",transform:"translateY(-50%)",zIndex:20,width:20,height:48,borderRadius:rightPanel?"6px 0 0 6px":"0 6px 6px 0",background:"rgba(30,31,40,0.9)",border:"1px solid rgba(255,255,255,0.08)",borderRight:rightPanel?"none":"1px solid rgba(255,255,255,0.08)",borderLeft:rightPanel?"1px solid rgba(255,255,255,0.08)":"none",color:"#6a6a7a",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0,transition:"right 0.2s ease"}}>{rightPanel?"\u203A":"\u2039"}</button>}
+        {rightPanel&&<div style={{width:isMobile?"100%":260,minWidth:isMobile?0:260,padding:"14px 12px",borderLeft:isMobile?"none":"1px solid rgba(255,255,255,0.04)",overflowY:"auto",flexShrink:0,...(isMobile?{position:"absolute",right:0,top:0,bottom:0,zIndex:15,background:"#0b0c10"}:{})}}>{isMobile&&<button onClick={()=>setRightPanel(false)} style={{position:"absolute",top:8,right:8,zIndex:1,width:28,height:28,borderRadius:"50%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",color:"#6a6a7a",fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{"\u2715"}</button>}
           {det?<div>
             <div style={{display:"inline-block",padding:"2px 8px",borderRadius:8,background:det.color+"22",border:"1px solid "+det.color+"44",color:det.color,fontSize:8,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.8px",marginBottom:8}}>{det.type==="concept"?"Concept":det.type==="lever"?"Policy Lever":det.type==="constraint"?"Constraint":(TIERS[det.tier]?TIERS[det.tier].label:"Paper")}{" \u2022 "}{DOM[det.domain]?DOM[det.domain].label:""}{det.yr?" \u2022 "+det.yr:""}</div>
             <div style={{fontSize:det.type==="concept"?17:14,fontWeight:700,color:"#f0e6d8",lineHeight:1.3,marginBottom:6}}>{det.type==="concept"?det.label.replace("\n"," "):det.label}</div>
